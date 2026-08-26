@@ -1,0 +1,44 @@
+[
+  {
+    "id": "no_added_sugar",
+    "claim_phrases": ["no added sugar", "no sugar added", "sugar not added"],
+    "regulation": "Food Safety and Standards (Labelling and Display) Regulations, 2020",
+    "plain_rule": "A product can only claim 'No Added Sugar' if no sugar (or ingredient containing added sugar) was added during manufacturing. The product may still contain natural sugars, but if so the label must clearly say so. This claim does NOT mean the product is low in sugar overall.",
+    "violation_check": "Flag as likely violation if the ingredient list contains any added-sugar-type ingredient (sucrose, glucose syrup, dextrose, maltose, invert sugar syrup, honey added as an ingredient, fruit juice concentrate added as a sweetener, brown sugar, cane sugar, corn syrup, high-fructose corn syrup)."
+  },
+  {
+    "id": "sugar_free",
+    "claim_phrases": ["sugar free", "sugar-free", "0% sugar", "zero sugar"],
+    "regulation": "Food Safety and Standards (Labelling and Display) Regulations, 2020",
+    "plain_rule": "‘Sugar-free’ requires meeting a specific low sugar-content threshold on the nutrition panel — simply swapping sugar for another sweetener does not automatically qualify.",
+    "violation_check": "Flag as insufficient evidence unless the nutrition panel's total sugar per 100g/100ml is visible and clearly above a negligible trace amount — do not guess a numeric threshold, mark insufficient evidence if the exact regulatory cutoff isn't in this file."
+  },
+  {
+    "id": "hundred_percent",
+    "claim_phrases": ["100%", "hundred percent"],
+    "regulation": "Food Safety and Standards (Labelling and Display) Regulations, 2020 — general prohibition on false, misleading, or deceptive labelling",
+    "plain_rule": "A '100%' claim (e.g. '100% fruit juice', '100% natural') must reflect the actual composition — FSSAI has taken enforcement action against brands for unsubstantiated 100% claims.",
+    "violation_check": "Flag as likely violation only if the ingredient list clearly shows added ingredients that contradict a literal 100% claim of that specific named component (e.g. '100% fruit juice' but water or sugar is listed). Otherwise insufficient evidence."
+  },
+  {
+    "id": "natural",
+    "claim_phrases": ["natural", "all natural", "100% natural"],
+    "regulation": "Food Safety and Standards (Labelling and Display) Regulations, 2020 — general prohibition on false, misleading, or deceptive labelling",
+    "plain_rule": "‘Natural’ claims must not create a misleading impression given what's actually in the product.",
+    "violation_check": "Flag as likely violation only if the ingredient list contains clearly synthetic/artificial additives (artificial colours, artificial flavours, or named synthetic preservatives) alongside a 'natural' claim. Otherwise insufficient evidence — this is a genuinely gray area, default cautiously."
+  },
+  {
+    "id": "no_added_preservatives",
+    "claim_phrases": ["no added preservatives", "no preservatives added", "preservative free"],
+    "regulation": "Food Safety and Standards (Advertising and Claims) Regulations, 2018",
+    "plain_rule": "This claim requires that no preservative was added during manufacturing, that no ingredient used contains an added preservative, and that no preservative was substituted with another additive doing the same job.",
+    "violation_check": "Flag as likely violation if the ingredient list names a preservative (e.g. sodium benzoate, potassium sorbate, sulphur dioxide, sodium nitrite) alongside this claim."
+  },
+  {
+    "id": "high_protein",
+    "claim_phrases": ["high protein", "high in protein", "protein rich", "rich in protein"],
+    "regulation": "Food Safety and Standards (Advertising and Claims) Regulations, 2018",
+    "plain_rule": "Nutrient-content claims like 'high protein' must be truthful, unambiguous, and scientifically substantiated by the brand — they have a specific meaning and are not just marketing language.",
+    "violation_check": "Flag as insufficient evidence unless the nutrition panel's protein-per-serving value is visible AND the claim is being checked against a specific numeric threshold already in this file — since no verified numeric threshold is hardcoded here yet, default to insufficient evidence and say so explicitly rather than guessing a number."
+  }
+]
