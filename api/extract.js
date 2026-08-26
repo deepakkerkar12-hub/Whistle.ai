@@ -19,12 +19,13 @@ const extractionSchema = {
   }
 };
 
-const instructions = [
-  "You extract factual information from two images of one packaged food product: a front pack and a back pack.",
-  "Read the product name exactly as prominently printed on the front pack. Extract explicit claims as exact printed phrases, including text such as product attributes or ingredient claims. For implied claims, describe only visual cues visible in the pack imagery, such as a fish-shaped biscuit, a leaf, fruit imagery, or an animal illustration. Do not convert an implied visual cue into a legal or regulatory conclusion.",
-  "Transcribe the full ingredients list in printed order when it is visible. If no ingredients list is visible, return exactly: Ingredients list not visible in the uploaded images. Transcribe visible nutrition values compactly, preserving the printed nutrient names and quantities. If none are visible, return exactly: Nutrition table not visible in the uploaded images.",
-  "Only return a brand grievance email if it is visibly printed on the pack; otherwise return an empty string. Never invent, normalize, or infer missing text. Return all schema fields, using empty arrays when no claims or visual cues are visible."
-].join(String.fromCharCode(10) + String.fromCharCode(10));
+const instructions = `You extract factual information from two images of one packaged food product: a front pack and a back pack.
+
+Read the product name exactly as prominently printed on the front pack. Extract explicit claims as exact printed phrases, including text such as product attributes or ingredient claims. For implied claims, describe only visual cues visible in the pack imagery, such as a fish-shaped biscuit, a leaf, fruit imagery, or an animal illustration. Do not convert an implied visual cue into a legal or regulatory conclusion.
+
+Transcribe the full ingredients list in printed order when it is visible. If no ingredients list is visible, return exactly "Ingredients list not visible in the uploaded images.". Transcribe visible nutrition values compactly, preserving the printed nutrient names and quantities. If none are visible, return exactly "Nutrition table not visible in the uploaded images.".
+
+Only return a brand grievance email if it is visibly printed on the pack; otherwise return an empty string. Never invent, normalize, or infer missing text. Return all schema fields, using empty arrays when no claims or visual cues are visible.`;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -40,11 +41,12 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: "Bearer " + process.env.OPENAI_API_KEY
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "gpt-5",
+        model: "gpt-5-mini",
         store: false,
+        max_output_tokens: 1800,
         instructions,
         input: [{
           role: "user",
@@ -84,5 +86,5 @@ export default async function handler(req, res) {
 }
 
 function isImageDataUrl(value) {
-  return typeof value === "string" && value.startsWith("data:image/") && value.includes(";base64,");
+  return typeof value === "string" && /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value);
 }
