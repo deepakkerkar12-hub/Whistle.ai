@@ -67,7 +67,17 @@ export default async function handler(req, res) {
     });
     const payload = await response.json();
     if (!response.ok) return res.status(response.status).json({ error: payload.error?.message || "OpenAI Vision request failed" });
-    return res.status(200).json(JSON.parse(payload.output_text));
+
+    const outputText = payload.output_text || payload.output
+      ?.flatMap((item) => item.content || [])
+      .find((item) => item.type === "output_text")
+      ?.text;
+
+    if (!outputText) {
+      return res.status(502).json({ error: "OpenAI Vision returned no structured extraction output" });
+    }
+
+    return res.status(200).json(JSON.parse(outputText));
   } catch (error) {
     return res.status(500).json({ error: error.message || "Extraction service failed" });
   }
