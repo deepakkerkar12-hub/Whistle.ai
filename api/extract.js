@@ -125,8 +125,7 @@ async function callVision(frontImage, backImage) {
     const extraction = readStructuredExtraction(payload);
     if (extraction) return extraction;
 
-    const retryable = payload.status === "incomplete" || payload.status === "failed" || !payload.status;
-    throw new ExtractionError("missing_structured_output", retryable);
+    throw new ExtractionError("missing_structured_output", true);
   } catch (error) {
     if (error instanceof ExtractionError) throw error;
     if (error?.name === "AbortError") throw new ExtractionError("vision_timeout", true);
