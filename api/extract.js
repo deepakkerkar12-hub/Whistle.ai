@@ -1,3 +1,6 @@
+const FRIENDLY_ERROR = "Can't load data right now. Please try again later";
+const REQUEST_TIMEOUT_MS = 28000;
+
 const extractionSchema = {
   type: "object",
   additionalProperties: false,
@@ -28,13 +31,55 @@ Transcribe the full ingredients list in printed order when it is visible. If no 
 Only return a brand grievance email if it is visibly printed on the pack; otherwise return an empty string. Never invent, normalize, or infer missing text. Return all schema fields, using empty arrays when no claims or visual cues are visible.`;
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-  if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: "OPENAI_API_KEY is not configured" });
-
-  const { frontImage, backImage } = req.body || {};
-  if (!isImageDataUrl(frontImage) || !isImageDataUrl(backImage)) {
-    return res.status(400).json({ error: "Two package images are required" });
+  if (req.method !== "POST") return res.status(405).json({ error: FRIENDLY_ERROR });
+  if (!process.env.OPENAI_API_KEY) {
+    console.error("Vision extraction unavailable: OPENAI_API_KEY is not configured");
+    return res.status(500).json({ error: FRIENDLY_ERROR });
   }
+
+  const { frontImage, backImage } = readRequestBody(req);
+  if (!isImageDataUrl(frontImage) || !isImageDataUrl(backImage)) {
+    console.error("Vision extraction rejected: package images were missing or unsupported");
+    return res.status(400).json({ error: FRIENDLY_ERROR });
+  }
+
+  try {
+    const extraction = await extractWithRetry(frontImage, backImage);
+    return res.status(200).json(extraction);
+  } catch (error) {
+    console.error("Vision extraction failed", {
+      code: error?.code || "unexpected_error",
+      status: error?.status || null
+    });
+    return res.status(502).json({ error: FRIENDLY_ERROR });
+  }
+}
+
+function readRequestBody(req) {
+  if (typeof req.body !== "string") return req.body || {};
+  try {
+    return JSON.parse(req.body);
+  } catch {
+    return {};
+  }
+}
+
+async function extractWithRetry(frontImage, backImage) {
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await callVision(frontImage, backImage);
+    } catch (error) {
+      lastError = error;
+      if (!error?.retryable || attempt === 1) throw error;
+    }
+  }
+  throw lastError || new ExtractionError("unexpected_error");
+}
+
+async function callVision(frontImage, backImage) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
     const response = await fetch("https://api.openai.com/v1/responses", {
@@ -43,10 +88,12 @@ export default async function handler(req, res) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
       },
+      signal: controller.signal,
       body: JSON.stringify({
         model: "gpt-5-mini",
         store: false,
-        max_output_tokens: 1800,
+        reasoning: { effort: "low" },
+        max_output_tokens: 1500,
         instructions,
         input: [{
           role: "user",
@@ -67,24 +114,78 @@ export default async function handler(req, res) {
         }
       })
     });
-    const payload = await response.json();
-    if (!response.ok) return res.status(response.status).json({ error: payload.error?.message || "OpenAI Vision request failed" });
 
-    const outputText = payload.output_text || payload.output
-      ?.flatMap((item) => item.content || [])
-      .find((item) => item.type === "output_text")
-      ?.text;
-
-    if (!outputText) {
-      return res.status(502).json({ error: "OpenAI Vision returned no structured extraction output" });
+    const rawPayload = await response.text();
+    const payload = parseJson(rawPayload);
+    if (!response.ok) {
+      throw new ExtractionError(`openai_http_${response.status}`, response.status >= 500 || response.status === 429, response.status);
     }
+    if (!payload) throw new ExtractionError("invalid_openai_payload", true);
 
-    return res.status(200).json(JSON.parse(outputText));
+    const extraction = readStructuredExtraction(payload);
+    if (extraction) return extraction;
+
+    const retryable = payload.status === "incomplete" || payload.status === "failed" || !payload.status;
+    throw new ExtractionError("missing_structured_output", retryable);
   } catch (error) {
-    return res.status(500).json({ error: error.message || "Extraction service failed" });
+    if (error instanceof ExtractionError) throw error;
+    if (error?.name === "AbortError") throw new ExtractionError("vision_timeout", true);
+    throw new ExtractionError("vision_request_failed", true);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function readStructuredExtraction(payload) {
+  const candidates = [payload.output_text, payload.output_parsed];
+  for (const item of payload.output || []) {
+    for (const content of item?.content || []) {
+      candidates.push(content?.parsed, content?.json, content?.text, content?.arguments);
+    }
+  }
+
+  for (const candidate of candidates) {
+    const parsed = typeof candidate === "string" ? parseJson(candidate) : candidate;
+    const normalized = normalizeExtraction(parsed);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+function normalizeExtraction(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const strings = ["product_name", "ingredients", "nutrition_values", "brand_grievance_email"];
+  if (!strings.every((key) => typeof value[key] === "string")) return null;
+  if (!Array.isArray(value.explicit_claims) || !Array.isArray(value.implied_claims)) return null;
+
+  return {
+    product_name: value.product_name,
+    explicit_claims: value.explicit_claims.filter((item) => typeof item === "string"),
+    implied_claims: value.implied_claims.filter((item) => typeof item === "string"),
+    ingredients: value.ingredients,
+    nutrition_values: value.nutrition_values,
+    brand_grievance_email: value.brand_grievance_email
+  };
+}
+
+function parseJson(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
   }
 }
 
 function isImageDataUrl(value) {
   return typeof value === "string" && /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value);
+}
+
+class ExtractionError extends Error {
+  constructor(code, retryable = false, status = null) {
+    super(code);
+    this.code = code;
+    this.retryable = retryable;
+    this.status = status;
+  }
 }
